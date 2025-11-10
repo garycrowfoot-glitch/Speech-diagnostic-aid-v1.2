@@ -509,11 +509,15 @@ with col1:
     reference_df = load_reference_phrases()
     
     # Display phrase in plain English, not IPA
+    # Make sure we're using the 'phrase' column which contains English text
+    phrase_options = reference_df['phrase'].tolist()
+    
     selected_phrase = st.selectbox(
         "Choose a diagnostic test phrase:",
-        reference_df['phrase'].tolist(),
+        options=phrase_options,
         key='phrase_selector',
-        help="Select a phrase for the patient to read or repeat"
+        help="Select a phrase for the patient to read or repeat",
+        format_func=lambda x: x  # Display exactly as is - English text
     )
     
     selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
