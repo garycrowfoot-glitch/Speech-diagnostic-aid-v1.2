@@ -81,17 +81,36 @@ def clean_ipa_for_pdf(text):
         'eɪ': 'ay', 'aɪ': 'eye', 'ɔɪ': 'oy', 'aʊ': 'ow',
         'əʊ': 'oh', 'ɪə': 'ear', 'eə': 'air', 'ʊə': 'oor',
         'ʊ': 'oo', 'ɒ': 'o', 'ɡ': 'g', 'ʧ': 'ch', 'ʤ': 'j',
-        'ː': ':', 'ˈ': "'", 'ˌ': ',', '→': '->', '̃': '~'
+        'ː': ':', 'ˈ': "'", 'ˌ': ',', '→': '->', '̃': '~',
+        'ɑ': 'ah', 'ɜ': 'er', 'ɜː': 'er', 'ɔ': 'aw',
+        'ʊ': 'u'
     }
     
     result = text
-    for ipa_char, ascii_rep in ipa_map.items():
-        result = result.replace(ipa_char, ascii_rep)
+    # Sort by length (longest first) to handle multi-character sequences first
+    for ipa_char in sorted(ipa_map.keys(), key=len, reverse=True):
+        result = result.replace(ipa_char, ipa_map[ipa_char])
     
     # Remove any remaining non-ASCII characters
     result = ''.join(char if ord(char) < 128 else '?' for char in result)
     
     return result
+
+def safe_pdf_text(text):
+    """Ensure text is safe for PDF encoding"""
+    if not text:
+        return ""
+    
+    text = str(text)
+    # First clean IPA characters
+    text = clean_ipa_for_pdf(text)
+    # Then ensure only latin-1 compatible characters
+    try:
+        text.encode('latin-1')
+        return text
+    except UnicodeEncodeError:
+        # If still problematic, replace non-latin-1 chars
+        return text.encode('latin-1', errors='replace').decode('latin-1')
 
 def parse_distortion_patterns(pattern_string):
     """Parse the example distortion patterns from reference data"""
@@ -340,6 +359,12 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
     pdf.cell(0, 10, "Speech Diagnostic Support Report", ln=True, align='C')
     pdf.ln(5)
     
+    # Version and Copyright
+    pdf.set_font("Arial", 'I', 9)
+    pdf.cell(0, 5, "Version 1.2 | Copyright 2024 Gary Crowfoot", ln=True, align='C')
+    pdf.cell(0, 5, "Contact: gary.crowfoot@newcastle.edu.au", ln=True, align='C')
+    pdf.ln(5)
+    
     # Disclaimer
     pdf.set_font("Arial", 'I', 9)
     pdf.multi_cell(0, 5, "DISCLAIMER: This tool provides pattern analysis and confidence scoring only. Diagnosis remains the responsibility of a qualified speech pathologist.")
@@ -355,12 +380,12 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
     pdf.cell(0, 10, "Analysis Summary", ln=True)
     pdf.set_font("Arial", '', 10)
     
-    pdf.cell(0, 8, f"Reference Phrase: {analysis_results['phrase']}", ln=True)
+    # Safe text for all fields
+    phrase_safe = safe_pdf_text(analysis_results['phrase'])
+    expected_ipa_clean = safe_pdf_text(analysis_results['expected_ipa'])
+    produced_ipa_clean = safe_pdf_text(analysis_results['produced_ipa'])
     
-    # Clean IPA for PDF
-    expected_ipa_clean = clean_ipa_for_pdf(analysis_results['expected_ipa'])
-    produced_ipa_clean = clean_ipa_for_pdf(analysis_results['produced_ipa'])
-    
+    pdf.cell(0, 8, f"Reference Phrase: {phrase_safe}", ln=True)
     pdf.cell(0, 8, f"Expected IPA (simplified): {expected_ipa_clean}", ln=True)
     pdf.cell(0, 8, f"Produced IPA (simplified): {produced_ipa_clean}", ln=True)
     pdf.cell(0, 8, f"Similarity Score: {analysis_results['similarity']:.2%}", ln=True)
@@ -372,7 +397,7 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
         pdf.set_font("Arial", 'B', 11)
         pdf.cell(0, 8, "Phoneme Structure:", ln=True)
         pdf.set_font("Arial", '', 9)
-        breakdown_clean = clean_ipa_for_pdf(analysis_results['phoneme_breakdown'])
+        breakdown_clean = safe_pdf_text(analysis_results['phoneme_breakdown'])
         pdf.multi_cell(0, 5, breakdown_clean)
         pdf.ln(3)
     
@@ -382,8 +407,8 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
         pdf.cell(0, 10, "Identified Differences", ln=True)
         pdf.set_font("Arial", '', 10)
         for i, diff in enumerate(analysis_results['differences'], 1):
-            exp_clean = clean_ipa_for_pdf(diff['expected'])
-            prod_clean = clean_ipa_for_pdf(diff['produced'])
+            exp_clean = safe_pdf_text(diff['expected'])
+            prod_clean = safe_pdf_text(diff['produced'])
             pdf.cell(0, 6, f"{i}. Expected: '{exp_clean}' -> Produced: '{prod_clean}'", ln=True)
         pdf.ln(5)
     
@@ -394,15 +419,24 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
         pdf.set_font("Arial", '', 10)
         for i, pattern in enumerate(analysis_results['patterns'], 1):
             pdf.set_font("Arial", 'B', 10)
-            pdf.cell(0, 6, f"{i}. {pattern['condition']} - {pattern['severity']}", ln=True)
+            condition_safe = safe_pdf_text(pattern['condition'])
+            severity_safe = safe_pdf_text(pattern['severity'])
+            pdf.cell(0, 6, f"{i}. {condition_safe} - {severity_safe}", ln=True)
+            
             pdf.set_font("Arial", '', 9)
-            pattern_clean = clean_ipa_for_pdf(pattern['pattern'])
+            pattern_clean = safe_pdf_text(pattern['pattern'])
+            example_clean = safe_pdf_text(pattern['example'])
+            clinical_notes_clean = safe_pdf_text(pattern['clinical_notes'])
+            age_concern_clean = safe_pdf_text(pattern['age_concern'])
+            confidence_clean = safe_pdf_text(pattern['confidence'])
+            
             pdf.cell(0, 5, f"   Pattern: {pattern_clean}", ln=True)
-            pdf.multi_cell(0, 5, f"   Clinical Notes: {pattern['clinical_notes']}")
-            pdf.cell(0, 5, f"   Age of Concern: {pattern['age_concern']}", ln=True)
-            pdf.cell(0, 5, f"   Confidence: {pattern['confidence']}", ln=True)
+            pdf.multi_cell(0, 5, f"   Clinical Notes: {clinical_notes_clean}")
+            pdf.cell(0, 5, f"   Age of Concern: {age_concern_clean}", ln=True)
+            pdf.cell(0, 5, f"   Confidence: {confidence_clean}", ln=True)
             if 'reference_context' in pattern:
-                pdf.multi_cell(0, 5, f"   Context: {pattern['reference_context']}")
+                context_clean = safe_pdf_text(pattern['reference_context'])
+                pdf.multi_cell(0, 5, f"   Context: {context_clean}")
             pdf.ln(2)
     
     # Clinician Notes
@@ -410,7 +444,8 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, "Clinician Notes", ln=True)
         pdf.set_font("Arial", '', 10)
-        pdf.multi_cell(0, 6, clinician_notes)
+        notes_safe = safe_pdf_text(clinician_notes)
+        pdf.multi_cell(0, 6, notes_safe)
     
     # Add note about IPA conversion
     pdf.ln(5)
@@ -427,6 +462,15 @@ if 'analysis_results' not in st.session_state:
 
 # Main App Layout
 st.title('🎙️ Speech Diagnostic Support Tool')
+
+# Version and Copyright
+col_left, col_right = st.columns([3, 1])
+with col_left:
+    st.caption("Version 1.2 | © 2024 Gary Crowfoot")
+with col_right:
+    st.caption("📧 [Contact](mailto:gary.crowfoot@newcastle.edu.au)")
+
+st.info("**For research or collaboration enquiries, please contact:** gary.crowfoot@newcastle.edu.au")
 
 # Disclaimer at top
 st.warning("⚠️ **DISCLAIMER:** This tool provides pattern analysis and confidence scoring only. Diagnosis remains the responsibility of a qualified speech pathologist.")
@@ -464,10 +508,12 @@ with col1:
     st.header("Step 1: Select Reference Phrase")
     reference_df = load_reference_phrases()
     
+    # Display phrase in plain English, not IPA
     selected_phrase = st.selectbox(
         "Choose a diagnostic test phrase:",
         reference_df['phrase'].tolist(),
-        key='phrase_selector'
+        key='phrase_selector',
+        help="Select a phrase for the patient to read or repeat"
     )
     
     selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
@@ -718,9 +764,10 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: gray; font-size: 0.9em;'>
-    <p>Speech Diagnostic Support Tool v2.0 | For clinical use by qualified speech pathologists only</p>
+    <p>Speech Diagnostic Support Tool v1.2 | © 2024 Gary Crowfoot</p>
+    <p>For clinical use by qualified speech pathologists only</p>
     <p>This tool is a prototype for pattern analysis and should not replace professional clinical judgment</p>
-    <p>Clinical database includes comprehensive phonological and speech disorder patterns</p>
+    <p>For research or collaboration enquiries: <a href="mailto:gary.crowfoot@newcastle.edu.au">gary.crowfoot@newcastle.edu.au</a></p>
     </div>
     """,
     unsafe_allow_html=True
