@@ -508,29 +508,30 @@ with col1:
     st.header("Step 1: Select Reference Phrase")
     reference_df = load_reference_phrases()
     
-# Display phrase in plain English, not IPA
-# Use the first column explicitly for phrase options
-phrase_options = reference_df.iloc[:, 0].astype(str).tolist()
-
-selected_phrase = st.selectbox(
-    "Choose a diagnostic test phrase:",
-    options=phrase_options,
-    help="Select a phrase for the patient to read or repeat",
-    format_func=lambda x: x  # Display English text exactly as is
-)
-
-selected_row = reference_df[reference_df.iloc[:, 0] == selected_phrase].iloc[0]
-
-st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
+    # Display phrase in plain English, not IPA
+    # Make sure we're using the 'phrase' column which contains English text
+    phrase_options = reference_df['phrase'].tolist()
     
-# Show phoneme breakdown
-if 'phoneme_breakdown' in selected_row and pd.notna(selected_row['phoneme_breakdown']):
-    with st.expander("📊 View Phoneme Breakdown"):
+    selected_phrase = st.selectbox(
+        "Choose a diagnostic test phrase:",
+        options=phrase_options,
+        key='phrase_selector',
+        help="Select a phrase for the patient to read or repeat",
+        format_func=lambda x: x  # Display exactly as is - English text
+    )
+    
+    selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
+    
+    st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
+    
+    # Show phoneme breakdown
+    if 'phoneme_breakdown' in selected_row and pd.notna(selected_row['phoneme_breakdown']):
+        with st.expander("📊 View Phoneme Breakdown"):
             st.code(selected_row['phoneme_breakdown'], language=None)
     
-# Show example patterns
-if 'example_distortion_patterns' in selected_row and pd.notna(selected_row['example_distortion_patterns']):
-    with st.expander("🔍 Common Distortion Patterns for This Phrase"):
+    # Show example patterns
+    if 'example_distortion_patterns' in selected_row and pd.notna(selected_row['example_distortion_patterns']):
+        with st.expander("🔍 Common Distortion Patterns for This Phrase"):
             st.write(selected_row['example_distortion_patterns'])
 
 with col2:
@@ -747,4 +748,31 @@ if st.session_state.analysis_complete and st.session_state.analysis_results:
                     'Severity': 'N/A',
                     'Age of Concern': 'N/A',
                     'Clinical Notes': 'No patterns identified',
-                 })
+                    'Reference Context': '',
+                    'Clinician Notes': clinician_notes
+                })
+            
+            csv_data = pd.DataFrame(csv_rows)
+            csv_buffer = io.StringIO()
+            csv_data.to_csv(csv_buffer, index=False)
+            
+            st.download_button(
+                label="Download CSV",
+                data=csv_buffer.getvalue(),
+                file_name=f"speech_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+
+# Footer
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center; color: gray; font-size: 0.9em;'>
+    <p>Speech Diagnostic Support Tool v1.2 | © 2024 Gary Crowfoot</p>
+    <p>For clinical use by qualified speech pathologists only</p>
+    <p>This tool is a prototype for pattern analysis and should not replace professional clinical judgment</p>
+    <p>For research or collaboration enquiries: <a href="mailto:gary.crowfoot@newcastle.edu.au">gary.crowfoot@newcastle.edu.au</a></p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
