@@ -524,13 +524,13 @@ selected_row = reference_df[reference_df.iloc[:, 0] == selected_phrase].iloc[0]
 st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
     
 # Show phoneme breakdown
-    if 'phoneme_breakdown' in selected_row and pd.notna(selected_row['phoneme_breakdown']):
-        with st.expander("📊 View Phoneme Breakdown"):
+if 'phoneme_breakdown' in selected_row and pd.notna(selected_row['phoneme_breakdown']):
+    with st.expander("📊 View Phoneme Breakdown"):
             st.code(selected_row['phoneme_breakdown'], language=None)
     
 # Show example patterns
-    if 'example_distortion_patterns' in selected_row and pd.notna(selected_row['example_distortion_patterns']):
-        with st.expander("🔍 Common Distortion Patterns for This Phrase"):
+if 'example_distortion_patterns' in selected_row and pd.notna(selected_row['example_distortion_patterns']):
+    with st.expander("🔍 Common Distortion Patterns for This Phrase"):
             st.write(selected_row['example_distortion_patterns'])
 
 with col2:
@@ -1552,6 +1552,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 
 
 
