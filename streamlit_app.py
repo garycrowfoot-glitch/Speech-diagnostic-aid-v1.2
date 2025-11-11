@@ -17,36 +17,20 @@ st.set_page_config(
 # Load configuration and reference data
 @st.cache_data
 def load_reference_phrases():
-    """Load comprehensive reference phrases from CSV with proper encoding"""
+    """Load comprehensive reference phrases from CSV"""
     try:
-        # Load the CSV safely with UTF-8 encoding
-        df = pd.read_csv('reference_phrases_diagnostic.csv', encoding='utf-8-sig')
+        df = pd.read_csv('reference_phrases_diagnostic.csv')
         df.columns = df.columns.str.strip()
-
-        # Ensure the first column is named 'phrase'
-        if 'phrase' not in df.columns:
-            possible_phrase_col = df.columns[0]
-            df = df.rename(columns={possible_phrase_col: 'phrase'})
-
         return df
-
     except FileNotFoundError:
-        st.warning("⚠️ reference_phrases_diagnostic.csv not found. Using basic fallback phrases.")
+        st.warning("⚠️ reference_phrases_diagnostic.csv not found. Using basic phrases.")
         data = {
             'phrase': ['The cat sat on the mat', 'She sells seashells by the seashore'],
             'expected_IPA': ['/ðə kæt sæt ɒn ðə mæt/', '/ʃi sɛlz siːʃɛlz baɪ ðə siːʃɔː/'],
-            'phoneme_breakdown': [
-                'ð ə | k æ t | s æ t | ɒ n | ð ə | m æ t',
-                'ʃ i | s ɛ l z | s iː ʃ ɛ l z | b aɪ | ð ə | s iː ʃ ɔː'
-            ],
-            'example_distortion_patterns': [
-                '/θ/→/f/, /t/→glottal stop',
-                '/ʃ/→/s/ (lisp), /z/→/d/'
-            ]
+            'phoneme_breakdown': ['ð ə | k æ t | s æ t | ɒ n | ð ə | m æ t', 'ʃ i | s ɛ l z | s iː ʃ ɛ l z | b aɪ | ð ə | s iː ʃ ɔː'],
+            'example_distortion_patterns': ['/θ/→/f/, /t/→glottal stop', '/ʃ/→/s/ (lisp), /z/→/d/']
         }
         return pd.DataFrame(data)
-
-
 
 @st.cache_data
 def load_sensitivity_config():
@@ -525,8 +509,6 @@ with col1:
     reference_df = load_reference_phrases()
     
     # Display phrase in plain English, not IPA
-    phrase_options = reference_df['phrase'].tolist()
-    
     # Make sure we're using the 'phrase' column which contains English text
     phrase_options = reference_df['phrase'].tolist()
     
@@ -535,37 +517,21 @@ with col1:
         options=phrase_options,
         key='phrase_selector',
         help="Select a phrase for the patient to read or repeat",
-        format_func=lambda x: x  
+        format_func=lambda x: x  # Display exactly as is - English text
     )
-
-# 👇 Add these two lines to check your CSV
-st.write("CSV columns:", reference_df.columns.tolist())
-st.dataframe(reference_df.head())
-
-# Display phrase in plain English, not IPA
-phrase_options = reference_df['phrase'].tolist()
-
-selected_phrase = st.selectbox(
-    "Choose a diagnostic test phrase:",
-    options=phrase_options,
-    key='phrase_selector',
-    help="Select a phrase for the patient to read or repeat",
-    format_func=lambda x: x
-)
-
     
-selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
+    selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
     
-st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
+    st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
     
-# Show phoneme breakdown
-if 'phoneme_breakdown' in selected_row and pd.notna(selected_row['phoneme_breakdown']):
-     with st.expander("📊 View Phoneme Breakdown"):
+    # Show phoneme breakdown
+    if 'phoneme_breakdown' in selected_row and pd.notna(selected_row['phoneme_breakdown']):
+        with st.expander("📊 View Phoneme Breakdown"):
             st.code(selected_row['phoneme_breakdown'], language=None)
     
-# Show example patterns
-if 'example_distortion_patterns' in selected_row and pd.notna(selected_row['example_distortion_patterns']):
-    with st.expander("🔍 Common Distortion Patterns for This Phrase"):
+    # Show example patterns
+    if 'example_distortion_patterns' in selected_row and pd.notna(selected_row['example_distortion_patterns']):
+        with st.expander("🔍 Common Distortion Patterns for This Phrase"):
             st.write(selected_row['example_distortion_patterns'])
 
 with col2:
@@ -810,9 +776,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
-
-
-
-
-
