@@ -7,37 +7,6 @@ import difflib
 from fpdf import FPDF
 import random
 
-import streamlit as st
-import pandas as pd
-
-# Load the CSV file — adjust the path if needed
-try:
-    df = pd.read_csv('reference_phrases_diagnostic.csv', encoding='utf-8-sig')
-except FileNotFoundError:
-    st.error("❌ Could not find the CSV file: reference_phrases_diagnostic.csv")
-    st.stop()
-
-# Show the names of columns found in your CSV
-st.write("### Columns detected in CSV:")
-st.write(df.columns.tolist())
-
-# Show first 5 rows of your CSV file
-st.write("### First 5 rows of data from CSV:")
-st.dataframe(df.head())
-
-# Extract dropdown options from the first column explicitly
-phrase_options = df.iloc[:, 0].astype(str).tolist()
-
-# Show the dropdown with the phrases
-selected_phrase = st.selectbox(
-    "Choose a diagnostic test phrase:",
-    options=phrase_options,
-    format_func=lambda x: x  # Show exact text from CSV
-)
-
-st.write("### Selected phrase:")
-st.write(selected_phrase)
-
 # Page configuration
 st.set_page_config(
     page_title="Speech Diagnostic Support Tool",
@@ -807,5 +776,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 
 
