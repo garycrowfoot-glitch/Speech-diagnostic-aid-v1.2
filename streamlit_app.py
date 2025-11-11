@@ -19,22 +19,14 @@ st.set_page_config(
 def load_reference_phrases():
     """Load comprehensive reference phrases from CSV with proper encoding"""
     try:
-        # ✅ Use utf-8-sig to fix hidden BOM/encoding issues
+        # Load the CSV safely with UTF-8 encoding
         df = pd.read_csv('reference_phrases_diagnostic.csv', encoding='utf-8-sig')
-
-        # Clean column headers
         df.columns = df.columns.str.strip()
 
-        # ✅ Ensure the first column is called 'phrase' and contains English text
+        # Ensure the first column is named 'phrase'
         if 'phrase' not in df.columns:
-            # Try to rename if headers got misaligned
             possible_phrase_col = df.columns[0]
-            st.warning(f"Renaming first column '{possible_phrase_col}' to 'phrase'")
             df = df.rename(columns={possible_phrase_col: 'phrase'})
-
-        # Show debug info (can remove later)
-        st.write("DEBUG — Reference phrases preview:")
-        st.dataframe(df.head())
 
         return df
 
@@ -53,6 +45,7 @@ def load_reference_phrases():
             ]
         }
         return pd.DataFrame(data)
+
 
 
 @st.cache_data
@@ -817,6 +810,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 
 
 
