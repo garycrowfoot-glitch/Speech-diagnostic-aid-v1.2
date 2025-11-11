@@ -540,7 +540,7 @@ selected_phrase = st.selectbox(
     
 selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
     
-    st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
+st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
     
     # Show phoneme breakdown
     if 'phoneme_breakdown' in selected_row and pd.notna(selected_row['phoneme_breakdown']):
@@ -794,5 +794,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 
 
