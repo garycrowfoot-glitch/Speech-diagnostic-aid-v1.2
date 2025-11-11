@@ -747,11 +747,4 @@ if st.session_state.analysis_complete and st.session_state.analysis_results:
                     'Severity': 'N/A',
                     'Age of Concern': 'N/A',
                     'Clinical Notes': 'No patterns identified',
-                    
-
-
-
-
-
-
-
+                 })
