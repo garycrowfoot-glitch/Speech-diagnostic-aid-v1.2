@@ -521,7 +521,8 @@ with col1:
         help="Select a phrase for the patient to read or repeat",
         format_func=lambda x: x  
     )
-    # 👇 Add these two lines to check your CSV
+
+# 👇 Add these two lines to check your CSV
 st.write("CSV columns:", reference_df.columns.tolist())
 st.dataframe(reference_df.head())
 
@@ -537,7 +538,7 @@ selected_phrase = st.selectbox(
 )
 
     
-    selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
+selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
     
     st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
     
@@ -793,4 +794,5 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 
