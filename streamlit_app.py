@@ -509,6 +509,8 @@ with col1:
     reference_df = load_reference_phrases()
     
     # Display phrase in plain English, not IPA
+    phrase_options = reference_df['phrase'].tolist()
+    
     # Make sure we're using the 'phrase' column which contains English text
     phrase_options = reference_df['phrase'].tolist()
     
@@ -517,8 +519,23 @@ with col1:
         options=phrase_options,
         key='phrase_selector',
         help="Select a phrase for the patient to read or repeat",
-        format_func=lambda x: x  # Display exactly as is - English text
+        format_func=lambda x: x  
     )
+    # 👇 Add these two lines to check your CSV
+st.write("CSV columns:", reference_df.columns.tolist())
+st.dataframe(reference_df.head())
+
+# Display phrase in plain English, not IPA
+phrase_options = reference_df['phrase'].tolist()
+
+selected_phrase = st.selectbox(
+    "Choose a diagnostic test phrase:",
+    options=phrase_options,
+    key='phrase_selector',
+    help="Select a phrase for the patient to read or repeat",
+    format_func=lambda x: x
+)
+
     
     selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
     
@@ -776,3 +793,4 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
