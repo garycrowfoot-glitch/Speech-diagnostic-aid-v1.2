@@ -508,21 +508,21 @@ with col1:
     st.header("Step 1: Select Reference Phrase")
     reference_df = load_reference_phrases()
     
-    # Display phrase in plain English, not IPA
-    # Make sure we're using the 'phrase' column which contains English text
-    phrase_options = reference_df.iloc[:, 0].astype(str).tolist()
-    
-    selected_phrase = st.selectbox(
-        "Choose a diagnostic test phrase:",
-        options=phrase_options,
-        key='phrase_selector',
-        help="Select a phrase for the patient to read or repeat",
-        format_func=lambda x: x  # Display exactly as is - English text
-    )
-    
-    selected_row = reference_df[reference_df.iloc[:, 0] == selected_phrase].iloc[0]
-    
-    st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
+# Display phrase in plain English, not IPA
+# Use the first column explicitly for phrase options
+phrase_options = reference_df.iloc[:, 0].astype(str).tolist()
+
+selected_phrase = st.selectbox(
+    "Choose a diagnostic test phrase:",
+    options=phrase_options,
+    help="Select a phrase for the patient to read or repeat",
+    format_func=lambda x: x  # Display English text exactly as is
+)
+
+selected_row = reference_df[reference_df.iloc[:, 0] == selected_phrase].iloc[0]
+
+st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
+
     
     # Show phoneme breakdown
     if 'phoneme_breakdown' in selected_row and pd.notna(selected_row['phoneme_breakdown']):
@@ -776,6 +776,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 
 
 
