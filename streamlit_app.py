@@ -5,7 +5,8 @@ import io
 from datetime import datetime
 import difflib
 from fpdf import FPDF
-import random
+import tempfile
+import os
 
 # Page configuration
 st.set_page_config(
@@ -64,15 +65,93 @@ def load_speech_rules():
         }
         return pd.DataFrame(data)
 
+@st.cache_resource
+def load_whisper_model():
+    """Load local Whisper model (free, no API costs)"""
+    try:
+        import whisper
+        model = whisper.load_model("base")  # Can use: tiny, base, small, medium, large
+        return model, True, None
+    except ImportError:
+        return None, False, "Whisper not installed. Add 'openai-whisper' to requirements.txt"
+    except Exception as e:
+        return None, False, f"Error loading Whisper: {str(e)}"
+
+def transcribe_audio_to_text(audio_file, model):
+    """
+    Transcribe audio file to text using local Whisper model (FREE)
+    Returns: (transcribed_text, success_flag, error_message)
+    """
+    try:
+        import whisper
+        
+        # Save uploaded file to temporary location
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+            tmp_file.write(audio_file.getvalue())
+            tmp_path = tmp_file.name
+        
+        try:
+            # Transcribe using local Whisper model
+            result = model.transcribe(tmp_path, language='en')
+            transcribed_text = result['text'].strip()
+            
+            return transcribed_text, True, None
+        finally:
+            # Clean up temp file
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+                
+    except Exception as e:
+        return None, False, f"Transcription error: {str(e)}"
+
+def text_to_ipa(text):
+    """
+    Convert English text to IPA using epitran (FREE)
+    Returns: (ipa_string, success_flag, error_message)
+    """
+    try:
+        import epitran
+        
+        # Initialize epitran for English
+        epi = epitran.Epitran('eng-Latn')
+        
+        # Convert to IPA
+        ipa = epi.transliterate(text)
+        
+        # Wrap in forward slashes
+        return f"/{ipa}/", True, None
+        
+    except ImportError:
+        return None, False, "Epitran library not installed. Add 'epitran' to requirements.txt"
+    except Exception as e:
+        return None, False, f"IPA conversion error: {str(e)}"
+
+def audio_to_ipa_pipeline(audio_file, reference_phrase, whisper_model):
+    """
+    Complete FREE pipeline: Audio → Text → IPA
+    Returns: (ipa_string, transcribed_text, success_flag, error_message)
+    """
+    # Step 1: Transcribe audio to text using local Whisper
+    transcribed_text, success, error = transcribe_audio_to_text(audio_file, whisper_model)
+    
+    if not success:
+        return None, None, False, error
+    
+    # Step 2: Convert text to IPA using Epitran
+    ipa_string, success, error = text_to_ipa(transcribed_text)
+    
+    if not success:
+        return None, transcribed_text, False, error
+    
+    return ipa_string, transcribed_text, True, None
+
 def clean_ipa_for_pdf(text):
     """Convert IPA characters to ASCII-safe alternatives for PDF generation"""
     if not text:
         return ""
     
-    # Remove forward slashes used as delimiters
     text = str(text).strip('/')
     
-    # Map IPA characters to readable ASCII representations
     ipa_map = {
         'ð': 'dh', 'θ': 'th', 'ʃ': 'sh', 'ʒ': 'zh',
         'ŋ': 'ng', 'ɹ': 'r', 'ɔː': 'aw', 'ɔ': 'o',
@@ -82,18 +161,14 @@ def clean_ipa_for_pdf(text):
         'əʊ': 'oh', 'ɪə': 'ear', 'eə': 'air', 'ʊə': 'oor',
         'ʊ': 'oo', 'ɒ': 'o', 'ɡ': 'g', 'ʧ': 'ch', 'ʤ': 'j',
         'ː': ':', 'ˈ': "'", 'ˌ': ',', '→': '->', '̃': '~',
-        'ɑ': 'ah', 'ɜ': 'er', 'ɜː': 'er', 'ɔ': 'aw',
-        'ʊ': 'u'
+        'ɑ': 'ah', 'ɜ': 'er', 'ɜː': 'er',
     }
     
     result = text
-    # Sort by length (longest first) to handle multi-character sequences first
     for ipa_char in sorted(ipa_map.keys(), key=len, reverse=True):
         result = result.replace(ipa_char, ipa_map[ipa_char])
     
-    # Remove any remaining non-ASCII characters
     result = ''.join(char if ord(char) < 128 else '?' for char in result)
-    
     return result
 
 def safe_pdf_text(text):
@@ -102,14 +177,11 @@ def safe_pdf_text(text):
         return ""
     
     text = str(text)
-    # First clean IPA characters
     text = clean_ipa_for_pdf(text)
-    # Then ensure only latin-1 compatible characters
     try:
         text.encode('latin-1')
         return text
     except UnicodeEncodeError:
-        # If still problematic, replace non-latin-1 chars
         return text.encode('latin-1', errors='replace').decode('latin-1')
 
 def parse_distortion_patterns(pattern_string):
@@ -118,17 +190,14 @@ def parse_distortion_patterns(pattern_string):
     if pd.isna(pattern_string) or not pattern_string:
         return patterns
     
-    # Split by comma and parse each pattern
     items = pattern_string.split(',')
     for item in items:
         item = item.strip()
         if '→' in item or '->' in item:
-            # Handle both → and -> arrows
             separator = '→' if '→' in item else '->'
             parts = item.split(separator)
             source = parts[0].strip().strip('/')
             target_full = parts[1].strip()
-            # Extract target phoneme (remove descriptions in parentheses)
             target = target_full.split('(')[0].strip().strip('/')
             description = ''
             if '(' in target_full:
@@ -140,52 +209,6 @@ def parse_distortion_patterns(pattern_string):
                 'full': item
             })
     return patterns
-
-def simulate_audio_to_ipa(audio_file, reference_phrase):
-    """
-    Simulate audio to IPA conversion with realistic variations based on reference patterns.
-    In production, this would use speech recognition + phonetic analysis.
-    """
-    reference_ipa = reference_phrase['expected_IPA']
-    distortion_patterns = parse_distortion_patterns(reference_phrase.get('example_distortion_patterns', ''))
-    
-    # Remove IPA delimiters
-    clean_ipa = reference_ipa.strip('/')
-    ipa_chars = list(clean_ipa)
-    
-    # Randomly select 0-3 distortion patterns to apply
-    num_errors = random.randint(0, min(3, len(distortion_patterns))) if distortion_patterns else random.randint(0, 2)
-    
-    # Apply patterns from reference data
-    if distortion_patterns and num_errors > 0:
-        selected_patterns = random.sample(distortion_patterns, num_errors)
-        for pattern in selected_patterns:
-            # Find and replace source phoneme with target
-            clean_str = ''.join(ipa_chars)
-            if pattern['source'] in clean_str:
-                # Replace first occurrence
-                idx = clean_str.find(pattern['source'])
-                if idx != -1:
-                    # Replace at character level
-                    source_len = len(pattern['source'])
-                    target = pattern['target'] if pattern['target'] else ''
-                    ipa_chars = list(clean_str[:idx] + target + clean_str[idx + source_len:])
-    else:
-        # Fallback to generic substitutions
-        common_substitutions = {
-            'r': 'w', 'ɹ': 'w', 'l': 'w',
-            'θ': 'f', 'ð': 'd',
-            's': 't', 'ʃ': 't',
-            'k': 't', 'g': 'd',
-        }
-        for _ in range(num_errors):
-            if ipa_chars:
-                idx = random.randint(0, len(ipa_chars) - 1)
-                char = ipa_chars[idx]
-                if char in common_substitutions:
-                    ipa_chars[idx] = common_substitutions[char]
-    
-    return '/' + ''.join(ipa_chars) + '/'
 
 def compare_ipa_transcriptions(produced_ipa, expected_ipa):
     """Compare produced IPA with expected IPA and identify differences"""
@@ -208,10 +231,9 @@ def compare_ipa_transcriptions(produced_ipa, expected_ipa):
     return differences, similarity
 
 def identify_patterns(differences, speech_rules, reference_patterns):
-    """Identify potential speech disorder patterns using clinical rules and reference patterns"""
+    """Identify potential speech disorder patterns using clinical rules"""
     identified_patterns = []
     
-    # Parse reference patterns for context
     ref_pattern_dict = {}
     for rp in reference_patterns:
         ref_pattern_dict[rp['source']] = rp
@@ -221,7 +243,6 @@ def identify_patterns(differences, speech_rules, reference_patterns):
             expected = diff['expected']
             produced = diff['produced']
             
-            # Check if this matches a known reference pattern
             matching_ref = None
             for source, ref_p in ref_pattern_dict.items():
                 if expected == source or expected in source:
@@ -361,7 +382,7 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
     
     # Version and Copyright
     pdf.set_font("Arial", 'I', 9)
-    pdf.cell(0, 5, "Version 1.2 | Copyright 2024 Gary Crowfoot", ln=True, align='C')
+    pdf.cell(0, 5, "Version 1.3 (Free Edition) | Copyright 2024 Gary Crowfoot", ln=True, align='C')
     pdf.cell(0, 5, "Contact: gary.crowfoot@newcastle.edu.au", ln=True, align='C')
     pdf.ln(5)
     
@@ -380,19 +401,22 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
     pdf.cell(0, 10, "Analysis Summary", ln=True)
     pdf.set_font("Arial", '', 10)
     
-    # Safe text for all fields
     phrase_safe = safe_pdf_text(analysis_results['phrase'])
     expected_ipa_clean = safe_pdf_text(analysis_results['expected_ipa'])
     produced_ipa_clean = safe_pdf_text(analysis_results['produced_ipa'])
     
     pdf.cell(0, 8, f"Reference Phrase: {phrase_safe}", ln=True)
+    
+    if 'transcribed_text' in analysis_results and analysis_results['transcribed_text']:
+        transcribed_safe = safe_pdf_text(analysis_results['transcribed_text'])
+        pdf.cell(0, 8, f"Transcribed Text: {transcribed_safe}", ln=True)
+    
     pdf.cell(0, 8, f"Expected IPA (simplified): {expected_ipa_clean}", ln=True)
     pdf.cell(0, 8, f"Produced IPA (simplified): {produced_ipa_clean}", ln=True)
     pdf.cell(0, 8, f"Similarity Score: {analysis_results['similarity']:.2%}", ln=True)
     pdf.cell(0, 8, f"Confidence Level: {analysis_results['confidence']}", ln=True)
     pdf.ln(5)
     
-    # Phoneme Breakdown
     if 'phoneme_breakdown' in analysis_results and analysis_results['phoneme_breakdown']:
         pdf.set_font("Arial", 'B', 11)
         pdf.cell(0, 8, "Phoneme Structure:", ln=True)
@@ -401,7 +425,6 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
         pdf.multi_cell(0, 5, breakdown_clean)
         pdf.ln(3)
     
-    # Differences
     if analysis_results['differences']:
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, "Identified Differences", ln=True)
@@ -412,7 +435,6 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
             pdf.cell(0, 6, f"{i}. Expected: '{exp_clean}' -> Produced: '{prod_clean}'", ln=True)
         pdf.ln(5)
     
-    # Clinical Patterns
     if analysis_results['patterns']:
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, "Clinical Pattern Analysis", ln=True)
@@ -425,7 +447,6 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
             
             pdf.set_font("Arial", '', 9)
             pattern_clean = safe_pdf_text(pattern['pattern'])
-            example_clean = safe_pdf_text(pattern['example'])
             clinical_notes_clean = safe_pdf_text(pattern['clinical_notes'])
             age_concern_clean = safe_pdf_text(pattern['age_concern'])
             confidence_clean = safe_pdf_text(pattern['confidence'])
@@ -439,7 +460,6 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
                 pdf.multi_cell(0, 5, f"   Context: {context_clean}")
             pdf.ln(2)
     
-    # Clinician Notes
     if clinician_notes:
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, "Clinician Notes", ln=True)
@@ -447,7 +467,6 @@ def generate_pdf_report(analysis_results, clinician_notes=""):
         notes_safe = safe_pdf_text(clinician_notes)
         pdf.multi_cell(0, 6, notes_safe)
     
-    # Add note about IPA conversion
     pdf.ln(5)
     pdf.set_font("Arial", 'I', 8)
     pdf.multi_cell(0, 5, "Note: IPA symbols have been converted to ASCII-readable format for PDF compatibility. Refer to the web interface for precise phonetic notation.")
@@ -466,7 +485,7 @@ st.title('🎙️ Speech Diagnostic Support Tool')
 # Version and Copyright
 col_left, col_right = st.columns([3, 1])
 with col_left:
-    st.caption("Version 1.2 | © 2024 Gary Crowfoot")
+    st.caption("Version 1.3 (Free Edition) | © 2024 Gary Crowfoot")
 with col_right:
     st.caption("📧 [Contact](mailto:gary.crowfoot@newcastle.edu.au)")
 
@@ -476,6 +495,18 @@ st.info("**For research or collaboration enquiries, please contact:** gary.crowf
 st.warning("⚠️ **DISCLAIMER:** This tool provides pattern analysis and confidence scoring only. Diagnosis remains the responsibility of a qualified speech pathologist.")
 
 st.markdown("---")
+
+# Load Whisper model on first run
+if 'whisper_model' not in st.session_state:
+    with st.spinner("🔄 Loading speech recognition model (first time only, ~100MB)..."):
+        model, success, error = load_whisper_model()
+        if success:
+            st.session_state.whisper_model = model
+            st.session_state.whisper_ready = True
+        else:
+            st.session_state.whisper_model = None
+            st.session_state.whisper_ready = False
+            st.session_state.whisper_error = error
 
 # Sidebar for configuration
 with st.sidebar:
@@ -500,6 +531,28 @@ with st.sidebar:
     
     with st.expander("View All Test Phrases"):
         st.dataframe(reference_df[['phrase']], height=300)
+    
+    st.markdown("---")
+    
+    # System Status
+    st.subheader("⚙️ System Status")
+    if st.session_state.get('whisper_ready', False):
+        st.success("✅ Whisper (Local/Free)")
+    else:
+        st.error("❌ Whisper not loaded")
+        if st.session_state.get('whisper_error'):
+            with st.expander("Error Details"):
+                st.code(st.session_state.whisper_error)
+    
+    try:
+        import epitran
+        st.success("✅ Epitran (IPA/Free)")
+    except:
+        st.error("❌ Epitran not installed")
+    
+    st.markdown("---")
+    st.caption("💰 **100% FREE** - No API costs!")
+    st.caption("Runs locally on Streamlit servers")
 
 # Main content area
 col1, col2 = st.columns([1, 1])
@@ -508,8 +561,6 @@ with col1:
     st.header("Step 1: Select Reference Phrase")
     reference_df = load_reference_phrases()
     
-    # Display phrase in plain English, not IPA
-    # Make sure we're using the 'phrase' column which contains English text
     phrase_options = reference_df['phrase'].tolist()
     
     selected_phrase = st.selectbox(
@@ -517,19 +568,17 @@ with col1:
         options=phrase_options,
         key='phrase_selector',
         help="Select a phrase for the patient to read or repeat",
-        format_func=lambda x: x  # Display exactly as is - English text
+        format_func=lambda x: x
     )
     
     selected_row = reference_df[reference_df['phrase'] == selected_phrase].iloc[0]
     
     st.info(f"**Expected IPA:** {selected_row['expected_IPA']}")
     
-    # Show phoneme breakdown
     if 'phoneme_breakdown' in selected_row and pd.notna(selected_row['phoneme_breakdown']):
         with st.expander("📊 View Phoneme Breakdown"):
             st.code(selected_row['phoneme_breakdown'], language=None)
     
-    # Show example patterns
     if 'example_distortion_patterns' in selected_row and pd.notna(selected_row['example_distortion_patterns']):
         with st.expander("🔍 Common Distortion Patterns for This Phrase"):
             st.write(selected_row['example_distortion_patterns'])
@@ -539,47 +588,76 @@ with col2:
     
     uploaded_file = st.file_uploader(
         "Upload patient audio recording",
-        type=['wav', 'mp3', 'ogg', 'm4a'],
-        help="Supported formats: WAV, MP3, OGG, M4A"
+        type=['wav', 'mp3', 'ogg', 'm4a', 'flac'],
+        help="Supported formats: WAV, MP3, OGG, M4A, FLAC"
     )
     
     if uploaded_file:
         st.audio(uploaded_file)
+        st.caption(f"File: {uploaded_file.name} ({uploaded_file.size / 1024:.1f} KB)")
 
 # Analysis section
 st.markdown("---")
 st.header("Step 3: Analyze Speech")
 
-if st.button("🔍 Run Analysis", type="primary", disabled=not uploaded_file):
-    with st.spinner("Analyzing speech patterns..."):
-        import time
-        time.sleep(1)
-        
-        # Parse reference distortion patterns
+col_analyze, col_info = st.columns([1, 2])
+
+with col_analyze:
+    analyze_button = st.button("🔍 Run Free Analysis", type="primary", disabled=not uploaded_file or not st.session_state.get('whisper_ready', False))
+
+with col_info:
+    st.caption("💰 Completely FREE - Uses local Whisper model + Epitran")
+
+if analyze_button:
+    with st.spinner("🎧 Transcribing audio locally (this may take 10-30 seconds)..."):
         reference_patterns = parse_distortion_patterns(
             selected_row.get('example_distortion_patterns', '')
         )
         
-        # Perform analysis
-        produced_ipa = simulate_audio_to_ipa(uploaded_file, selected_row)
-        differences, similarity = compare_ipa_transcriptions(produced_ipa, selected_row['expected_IPA'])
-        patterns = identify_patterns(differences, speech_rules, reference_patterns)
-        confidence, confidence_type = calculate_confidence_level(similarity, config)
+        # Perform real audio transcription using local model
+        produced_ipa, transcribed_text, success, error = audio_to_ipa_pipeline(
+            uploaded_file, 
+            selected_row,
+            st.session_state.whisper_model
+        )
         
-        # Store results
-        st.session_state.analysis_results = {
-            'phrase': selected_phrase,
-            'expected_ipa': selected_row['expected_IPA'],
-            'produced_ipa': produced_ipa,
-            'phoneme_breakdown': selected_row.get('phoneme_breakdown', ''),
-            'differences': differences,
-            'similarity': similarity,
-            'patterns': patterns,
-            'confidence': confidence,
-            'confidence_type': confidence_type,
-            'reference_patterns': reference_patterns
-        }
-        st.session_state.analysis_complete = True
+        if not success:
+            st.error(f"❌ **Error:** {error}")
+            st.info("💡 **Setup Instructions:**\n\n"
+                   "Add to `requirements.txt`:\n"
+                   "```\n"
+                   "openai-whisper\n"
+                   "epitran\n"
+                   "```\n\n"
+                   "Then redeploy the app.")
+        else:
+            st.success(f"✅ Transcription complete: \"{transcribed_text}\"")
+            
+            with st.spinner("🔬 Analyzing phonetic patterns..."):
+                import time
+                time.sleep(0.5)
+                
+                # Perform comparison and pattern analysis
+                differences, similarity = compare_ipa_transcriptions(produced_ipa, selected_row['expected_IPA'])
+                patterns = identify_patterns(differences, speech_rules, reference_patterns)
+                confidence, confidence_type = calculate_confidence_level(similarity, config)
+                
+                # Store results
+                st.session_state.analysis_results = {
+                    'phrase': selected_phrase,
+                    'expected_ipa': selected_row['expected_IPA'],
+                    'produced_ipa': produced_ipa,
+                    'transcribed_text': transcribed_text,
+                    'phoneme_breakdown': selected_row.get('phoneme_breakdown', ''),
+                    'differences': differences,
+                    'similarity': similarity,
+                    'patterns': patterns,
+                    'confidence': confidence,
+                    'confidence_type': confidence_type,
+                    'reference_patterns': reference_patterns
+                }
+                st.session_state.analysis_complete = True
+                st.rerun()
 
 # Display results
 if st.session_state.analysis_complete and st.session_state.analysis_results:
@@ -589,7 +667,7 @@ if st.session_state.analysis_complete and st.session_state.analysis_results:
     results = st.session_state.analysis_results
     
     # Summary metrics
-    metric_col1, metric_col2, metric_col3 = st.columns(3)
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     
     with metric_col1:
         st.metric("Similarity Score", f"{results['similarity']:.1%}")
@@ -606,10 +684,32 @@ if st.session_state.analysis_complete and st.session_state.analysis_results:
     with metric_col3:
         st.metric("Patterns Detected", len(results['patterns']))
     
+    with metric_col4:
+        if 'transcribed_text' in results:
+            word_count = len(results['transcribed_text'].split())
+            st.metric("Words Transcribed", word_count)
+    
     # Detailed results in tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["📝 Transcription Comparison", "🔬 Phoneme Analysis", "🔍 Clinical Patterns", "📄 Report & Notes"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Transcription", "🔬 Phoneme Analysis", "🔍 Clinical Patterns", "📊 Comparison", "📄 Report & Notes"])
     
     with tab1:
+        st.subheader("Audio Transcription Results")
+        
+        if 'transcribed_text' in results and results['transcribed_text']:
+            st.markdown("**Transcribed Text:**")
+            st.info(f"🎤 \"{results['transcribed_text']}\"")
+        
+        st.markdown("**Reference Phrase:**")
+        st.success(f"📖 \"{results['phrase']}\"")
+        
+        # Text comparison
+        if 'transcribed_text' in results and results['transcribed_text']:
+            text_similarity = difflib.SequenceMatcher(None, 
+                                                     results['phrase'].lower(), 
+                                                     results['transcribed_text'].lower()).ratio()
+            st.metric("Text Accuracy", f"{text_similarity:.1%}")
+    
+    with tab2:
         st.subheader("Phonetic Transcription")
         
         comp_col1, comp_col2 = st.columns(2)
@@ -621,24 +721,8 @@ if st.session_state.analysis_complete and st.session_state.analysis_results:
             st.markdown("**Produced IPA:**")
             st.code(results['produced_ipa'], language=None)
         
-        if results['differences']:
-            st.subheader("Phoneme-Level Differences")
-            diff_data = []
-            for diff in results['differences']:
-                diff_data.append({
-                    'Type': diff['type'].title(),
-                    'Expected': diff['expected'] if diff['expected'] else '(none)',
-                    'Produced': diff['produced'] if diff['produced'] else '(none)',
-                    'Position': diff['position']
-                })
-            st.dataframe(pd.DataFrame(diff_data), hide_index=True)
-        else:
-            st.success("✅ No significant differences detected!")
-    
-    with tab2:
-        st.subheader("Phoneme Structure Analysis")
-        
         if results.get('phoneme_breakdown'):
+            st.markdown("---")
             st.markdown("**Word-Level Phoneme Breakdown:**")
             st.code(results['phoneme_breakdown'], language=None)
             st.caption("Phonemes are grouped by word boundaries (separated by |)")
@@ -688,12 +772,35 @@ if st.session_state.analysis_complete and st.session_state.analysis_results:
                 st.dataframe(related_rules, hide_index=True)
     
     with tab4:
+        st.subheader("Detailed Phoneme Comparison")
+        
+        if results['differences']:
+            st.markdown("**Phoneme-Level Differences:**")
+            diff_data = []
+            for diff in results['differences']:
+                diff_data.append({
+                    'Type': diff['type'].title(),
+                    'Expected': diff['expected'] if diff['expected'] else '(none)',
+                    'Produced': diff['produced'] if diff['produced'] else '(none)',
+                    'Position': diff['position']
+                })
+            st.dataframe(pd.DataFrame(diff_data), hide_index=True)
+            
+            # Visual similarity bar
+            st.markdown("---")
+            st.markdown("**Phonetic Similarity:**")
+            st.progress(results['similarity'])
+            st.caption(f"Overall match: {results['similarity']:.1%}")
+        else:
+            st.success("✅ No significant phoneme-level differences detected!")
+    
+    with tab5:
         st.subheader("Clinical Notes")
         
         clinician_notes = st.text_area(
             "Add clinical observations and notes:",
             height=150,
-            placeholder="Enter any additional observations, context, or clinical insights...\n\nExample:\n- Client history and background\n- Testing environment and conditions\n- Additional observations during assessment\n- Recommended follow-up actions\n- Other relevant clinical information"
+            placeholder="Enter any additional observations, context, or clinical insights...\n\nExample:\n- Client history and background\n- Testing environment and conditions\n- Audio quality observations\n- Additional observations during assessment\n- Recommended follow-up actions\n- Other relevant clinical information"
         )
         
         st.markdown("---")
@@ -718,6 +825,7 @@ if st.session_state.analysis_complete and st.session_state.analysis_results:
                 csv_rows.append({
                     'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'Reference Phrase': results['phrase'],
+                    'Transcribed Text': results.get('transcribed_text', ''),
                     'Expected IPA': results['expected_ipa'],
                     'Produced IPA': results['produced_ipa'],
                     'Phoneme Breakdown': results.get('phoneme_breakdown', ''),
@@ -737,6 +845,7 @@ if st.session_state.analysis_complete and st.session_state.analysis_results:
                 csv_rows.append({
                     'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'Reference Phrase': results['phrase'],
+                    'Transcribed Text': results.get('transcribed_text', ''),
                     'Expected IPA': results['expected_ipa'],
                     'Produced IPA': results['produced_ipa'],
                     'Phoneme Breakdown': results.get('phoneme_breakdown', ''),
@@ -768,10 +877,11 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: gray; font-size: 0.9em;'>
-    <p>Speech Diagnostic Support Tool v1.2 | © 2024 Gary Crowfoot</p>
+    <p>Speech Diagnostic Support Tool v1.3 (Free Edition) | © 2024 Gary Crowfoot</p>
     <p>For clinical use by qualified speech pathologists only</p>
     <p>This tool is a prototype for pattern analysis and should not replace professional clinical judgment</p>
     <p>For research or collaboration enquiries: <a href="mailto:gary.crowfoot@newcastle.edu.au">gary.crowfoot@newcastle.edu.au</a></p>
+    <p style="margin-top: 10px;">💰 <strong>100% FREE</strong> - No API costs, runs entirely on local models</p>
     </div>
     """,
     unsafe_allow_html=True
