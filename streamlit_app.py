@@ -746,7 +746,9 @@ if st.session_state.analysis_complete and st.session_state.analysis_results:
                     'Pattern': 'N/A',
                     'Severity': 'N/A',
                     'Age of Concern': 'N/A',
-                    'Clinical Notes': 'No patterns identified',import streamlit as st
+                    'Clinical Notes': 'No patterns identified',
+                    
+import streamlit as st
 import pandas as pd
 import json
 import io
@@ -1552,6 +1554,7 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
 
 
 
