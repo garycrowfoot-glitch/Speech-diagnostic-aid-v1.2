@@ -1,4 +1,4 @@
-phrase,expected_IPA,phoneme_breakdown,example_distortion_patterns,example_distortion_patterns_2,example_distortion_patterns_2
+phrase,expected_IPA,phoneme_breakdown,example_distortion_patterns,example_distortion_patterns_2,example_distortion_patterns_3
 The cat sat on the mat,/ðə kæt sæt ɒn ðə mæt/,ð ə | k æ t | s æ t | ɒ n | ð ə | m æ t,/θ/→/f/ (dental fricative substitution), /t/→glottal stop, final consonant deletion
 She sells seashells by the seashore,/ʃi sɛlz siːʃɛlz baɪ ðə siːʃɔː/,ʃ i | s ɛ l z | s iː ʃ ɛ l z | b aɪ | ð ə | s iː ʃ ɔː,/ʃ/→/s/ (lisp), /z/→/d/ (voicing error),
 Peter Piper picked a peck of pickled peppers,/ˈpiːtə ˈpaɪpə ˈpɪkt ə ˈpɛk əv ˈpɪkəld ˈpɛpəz/,p iː | t ə | p aɪ | p ə | p ɪ k t | ə | p ɛ k | ə v | p ɪ k ə l d | p ɛ p ə z,/p/→omission (bilabial deletion), /r/→/w/ (gliding),
@@ -15,3 +15,4 @@ Can you can a can as a canner can can a can,/kæn juː kæn ə kæn əz ə ˈkæ
 I saw Susie sitting in a shoeshine shop,/aɪ sɔː ˈsuːzi ˈsɪtɪŋ ɪn ə ˈʃuːʃaɪn ʃɒp/,aɪ | s ɔː | s uː z i | s ɪ t ɪ ŋ | ɪ n | ə | ʃ uː ʃ aɪ n | ʃ ɒ p,/ʃ/→/s/ (lisp), /z/→/d/, /ɪ/→/iː/ (vowel length error)
 If a dog chews shoes whose shoes does he choose,/ɪf ə dɒɡ ʧuːz ʃuːz huːz ʃuːz dʌz hiː ʧuːz/,ɪ f | ə | d ɒ ɡ | ʧ uː z | ʃ uː z | h uː z | ʃ uː z | d ʌ z | h iː | ʧ uː z,/ʧ/→/ʃ/, /ʃ/→/s/, final consonant deletion
 He threw three free throws,/hiː θruː θriː friː θrəʊz/,h iː | θ r uː | θ r iː | f r iː | θ r əʊ z,/θ/→/f/, /r/→/w/ (gliding), cluster simplification
+
